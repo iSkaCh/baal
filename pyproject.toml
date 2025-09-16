@@ -5,17 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "baal"
 version = "0.1.0"
-description = "Dagster orchestration repository for data pipelines"
+description = "Orchestration repository for data pipelines"
 requires-python = ">=3.12"
 dependencies = [
-    "dagster",
-    "dagster-webserver",
-    "dagster-postgres",
-    "dagster-docker",
+    "prefect",
     "pandas",
     "requests",
     "boto3",  # For AWS S3 operations
-    "tanit @ git+https://github.com/iSkaCh/tanit.git",  # OpenAlex extractor
+    "tanit @ git+https://github.com/iSkaCh/tanit.git", 
 ]
 
 [project.optional-dependencies]
