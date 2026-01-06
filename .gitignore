@@ -9,6 +9,7 @@ develop-eggs/
 dist/
 downloads/
 eggs/
+data/
 .eggs/
 lib/
 lib64/
@@ -21,7 +22,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-
+credentials.py
 .tmp*
 # PyInstaller
 *.manifest

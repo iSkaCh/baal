@@ -12,7 +12,10 @@ dependencies = [
     "pandas",
     "requests",
     "boto3",  # For AWS S3 operations
-    "tanit @ git+https://github.com/iSkaCh/tanit.git", 
+    #"tanit @ git+https://github.com/iSkaCh/tanit.git", 
+    "s3fs",
+    "xxhash",
+    'pyarrow'
 ]
 
 [project.optional-dependencies]
@@ -22,6 +25,7 @@ dev = [
     "isort",
     "mypy",
     "ruff",
+
 ]
 
 [tool.setuptools.packages.find]
