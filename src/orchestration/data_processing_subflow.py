@@ -4,6 +4,7 @@ from prefect.assets import materialize
 from prefect.futures import wait
 from sqlalchemy import text
 import logging
+import subprocess
 
 from data_processing.tables_queries import ENT_TABLE_CREATION_QUERIES
 from eshmun_config.eshmun_db_configs import (
@@ -56,34 +57,42 @@ class ProcessFlow:
             query = text(ENT_TABLE_CREATION_QUERIES[table])
             self.execute_query(query)
     @task
-    def run_entity_extractions(self, text_columns=["title", "s2tldr", "abstract"]):
+    def run_entity_extractions(self, text_columns=["title", "tldr", "abstract"]):
         for text_column in text_columns:
+            self.logger.info (f'Extracting entities from {text_column}')
             run_entity_extraction(text_column)
     @task
     def move_all_entities(self):
         move_all_entities()
     @task
     def rel_extraction(self):
-        generic_rel_extract_main(VLLMRelExtractor, num_bmids_to_fetch=30_000_000)
+        self.logger.info("Starting docker container trt_qwen_small")
+        subprocess.run(["docker", "start", "trt_qwen_small"], check=True)
+        try:
+            generic_rel_extract_main(VLLMRelExtractor, num_bmids_to_fetch=30_000_000)
+        finally:
+            self.logger.info("Stopping docker container trt_qwen_small")
+            subprocess.run(["docker", "stop", "trt_qwen_small"], check=True)
     @task
-    def create_ent_data_table(self):
-        self.logger.info("Executing create ent_data_table query")
-        self.delete_table (TABLE_NAMES["entities_data_table"])
-        sql_creation, sql_indexes  = get_create_ent_data_table_sql(TABLE_NAMES["entities_data_table"])
-        self.execute_query(sql_creation)
-        self.logger.info("Executing insert_umls query")
-        insert_umls_query = get_insert_umls_concepts_sql(
-            target_table=TABLE_NAMES["entities_data_table"],
-            source_table=TABLE_NAMES["rectified_umls_data"],
-            ent_counts_table=TABLE_NAMES["entities_with_occ"],
-        )
-        self.execute_query(insert_umls_query)
-        self.logger.info("Executing pp_ent_update query")
-        pp_ent_update_query = get_update_postprocessed_entity_sql(
-            target_table=TABLE_NAMES["entities_data_table"],
-            source_table="entities_data_3",
-        )
-        self.execute_query(pp_ent_update_query)
+    def create_ent_data_table(self,resume=True):
+        if not resume: 
+            sql_creation, sql_indexes  = get_create_ent_data_table_sql(TABLE_NAMES["entities_data_table"])
+            self.logger.info("Executing create ent_data_table query")
+            self.delete_table (TABLE_NAMES["entities_data_table"])
+            self.execute_query(sql_creation)
+            self.logger.info("Executing insert_umls query")
+            insert_umls_query = get_insert_umls_concepts_sql(
+                target_table=TABLE_NAMES["entities_data_table"],
+                source_table=TABLE_NAMES["rectified_umls_data"],
+                ent_counts_table=TABLE_NAMES["entities_with_occ"],
+            )
+            self.execute_query(insert_umls_query)
+            self.logger.info("Executing pp_ent_update query")
+            pp_ent_update_query = get_update_postprocessed_entity_sql(
+                target_table=TABLE_NAMES["entities_data_table"],
+                source_table="entities_data_3",
+            )
+            self.execute_query(pp_ent_update_query)
         self.logger.info("Executing compute_concepts_multithreaded")
         with get_sql_con(self.dataset, self.server_ip) as conn:
             compute_concepts_multithreaded(
@@ -94,7 +103,8 @@ class ProcessFlow:
                 num_threads=2,
                 min_occurrence=2,
             )
-        self.execute_query(sql_indexes)
+        if not resume:
+            self.execute_query(sql_indexes)
     @task
     def create_es_index(self):
         es_client = get_es_client()
@@ -129,8 +139,8 @@ class ProcessFlow:
             "concepts_occ",
         ]
         self.generate_tables(ents_tables_list)
-        rel_agg_tables_list = ["agg_rels_table", "rel_simplified_prefix"]
-        self.generate_tables(rel_agg_tables_list)
-        self.delete_table(TABLE_NAMES["agg_rels_table"])
+        # rel_agg_tables_list = ["agg_rels_table", "rel_simplified_prefix"]
+        # self.generate_tables(rel_agg_tables_list)
+        # self.delete_table(TABLE_NAMES["agg_rels_table"])
 if __name__ == '__main__':
     ProcessFlow().flow()
