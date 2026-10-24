@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from prefect import task, flow
 from prefect.assets import materialize
@@ -14,7 +15,7 @@ from data_preprocessing.compute_score import (
 from data_preprocessing.move_textual_data import move_textual_data
 from data_preprocessing import get_query
 
-CACHE_DIR = Path("E:/tanit_cache")
+CACHE_DIR = Path(os.environ.get("TANIT_CACHE", "/mnt/worker2/tanit_cache"))
 AUTHOR_SCORES_PATH = (CACHE_DIR / "author_scores.parquet").as_uri()
 JOURNALS_DATA_PATH = (CACHE_DIR / "journals_data.parquet").as_uri()
 LINKING_METRICS_PATH = (CACHE_DIR / "linking_metrics.parquet").as_uri()
