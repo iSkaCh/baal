@@ -2,7 +2,9 @@ from pathlib import Path
 from prefect import task, flow
 from prefect.assets import materialize
 from prefect.futures import wait
-from data_utils.sql_db_tools import get_sql_con,transfer_table_from_od_to_eshmun
+from sqlalchemy import text
+
+from data_utils.sql_db_tools import get_sql_con, transfer_table_from_od_to_eshmun
 from data_preprocessing.compute_article_links_metrics import compute_linking_scores
 from data_preprocessing.compute_score import (
     compute_journals_data,
@@ -21,20 +23,30 @@ LINKING_METRICS_PATH = (CACHE_DIR / "linking_metrics.parquet").as_uri()
 class PreprocessFlow:
     def __init__(self):
         self.dataset = "opendatasets"
-        self.server_ip = 'localhost:5432'
-    def execute_query (self, query): 
-        with get_sql_con (self.dataset,self.server_ip)as conn: 
+        self.server_ip = "localhost:5432"
+
+    def execute_query(self, query, dataset="opendatasets", auto_commit=True):
+        if isinstance(query, str):
+            query = text(query)
+        with get_sql_con(dataset, self.server_ip) as conn:
+            if auto_commit: 
+                conn = conn.execution_options(isolation_level="AUTOCOMMIT")
             conn.execute(query)
             conn.commit()
+
+    @task()
+    def create_pubmed_ids(self):
+        query = get_query("pubmed_ids.sql")
+        self.execute_query(query, "pmdb")
+
     @materialize(
         "postgres://opendatasets/idx_map_table",
         "postgres://opendatasets/idx_map_table_backup",
         asset_deps=["postgres://opendatasets/pubmed_metadata"],
     )
     def create_idx_map_table(self):
-        
         query = get_query("generate_idx_map_table.sql")
-        self.execute_query(query) 
+        self.execute_query(query,auto_commit=True)
 
     @materialize(
         "postgres://opendatasets/opendata_combined",
@@ -42,7 +54,7 @@ class PreprocessFlow:
     )
     def combine_articles_data(self):
         query = get_query("combine_articles_data.sql")
-        self.execute_query(query) 
+        self.execute_query(query)
 
     @materialize(
         "postgres://opendatasets/article_type_and_fields",
@@ -50,27 +62,36 @@ class PreprocessFlow:
     )
     def move_fields_types(self):
         query = get_query("move_fields_types.sql")
-        self.execute_query(query) 
+        self.execute_query(query)
 
     @task(
         asset_deps=["postgres://opendatasets/idx_map_table"],
     )
     def move_pubmed_authors(self):
         query = get_query("move_pubmed_authors.sql")
-        self.execute_query(query) 
+        self.execute_query(query)
+
+    @task(
+        asset_deps=["postgres://opendatasets/idx_map_table"],
+    )
+    def move_s2_authors(self):
+        query = get_query("move_s2_authors.sql")
+        self.execute_query(query)
 
     @task(
         asset_deps=["postgres://opendatasets/idx_map_table"],
     )
     def move_pubmed_journals(self):
         query = get_query("move_pubmed_journals.sql")
-        self.execute_query(query) 
+        self.execute_query(query)
+
     @materialize(
         LINKING_METRICS_PATH,
         asset_deps=["postgres://opendatasets/idx_map_table"],
     )
     def compute_linking_scores(self):
         compute_linking_scores()
+
     @materialize(
         JOURNALS_DATA_PATH,
         asset_deps=["postgres://opendatasets/idx_map_table"],
@@ -100,41 +121,49 @@ class PreprocessFlow:
             journals_score_path=JOURNALS_DATA_PATH,
             linking_metrics_path=LINKING_METRICS_PATH,
         )
+
     @materialize(
         "postgres://eshmun/preprocessed_text",
         asset_deps=["postgres://opendatasets/idx_map_table"],
     )
-    def move_textual_data (self):
-        move_textual_data ()
+    def move_textual_data(self):
+        move_textual_data()
+
     @materialize(
         "postgres://opendatasets/articles_data",
-        asset_deps=["postgres://opendatasets/opendata_combined",
-                    LINKING_METRICS_PATH,
-                    "postgres://opendatasets/article_type_and_fields"],
+        asset_deps=[
+            "postgres://opendatasets/opendata_combined",
+            LINKING_METRICS_PATH,
+            "postgres://opendatasets/article_type_and_fields",
+        ],
     )
     @task()
-    def join_article_data_tables (self):
+    def join_article_data_tables(self):
         query = get_query("join_article_data_tables.sql")
-        self.execute_query(query) 
+        self.execute_query(query)
+
     @task()
-    def move_table_to_eshmun (self,table_name):
+    def move_table_to_eshmun(self, table_name):
         transfer_table_from_od_to_eshmun(table_name)
+
     @flow(name="Preprocessing Flow")
-    def flow(self):
-        self.create_idx_map_table()
-        self.combine_articles_data()
-        self.move_fields_types()# 3h30
-        self.move_pubmed_authors()
-        self.move_pubmed_journals()
-        self.compute_linking_scores()
-        self.compute_journals_data()
-        self.compute_authors_score()
-        self.compute_final_score()
-        self.join_article_data_tables()
-        self.move_table_to_eshmun('articles_data')
+    def flow(self): #Total around 6h
+        self.create_idx_map_table() # 40m
+        self.move_fields_types()  # 45m
+        self.create_pubmed_ids() 
+        self.move_pubmed_authors() #1h18
+        self.move_s2_authors() #16m
+        self.move_pubmed_journals() # 24min
+        self.combine_articles_data()#43m
+        self.compute_linking_scores() # 16min
+        self.compute_journals_data()# 42min
+        self.compute_authors_score() #35min
+        self.compute_final_score() #56min
+        self.join_article_data_tables() #11min requires 150gigs of free space  ( twice the size of the table)
+        self.move_table_to_eshmun("articles_data") # 40min
         self.move_textual_data.submit()
 
-        self.move_table_to_eshmun('openalex_authors')
+        self.move_table_to_eshmun("openalex_authors")
 
 
 if __name__ == "__main__":

@@ -6,9 +6,10 @@ from orchestration.data_processing_subflow import ProcessFlow
 
 @flow
 def full_flow():
-    #DataExtractor().flow()
-    #PreprocessFlow().flow()
-    ProcessFlow().flow()
+    DataExtractor().flow()
+    # PreprocessFlow().flow()
+    # ProcessFlow().flow()
+
 
 if __name__ == "__main__":
     full_flow()
