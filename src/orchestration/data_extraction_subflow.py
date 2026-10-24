@@ -32,7 +32,7 @@ logging.basicConfig(
 )
 OPENALEX_LOCAL_FOLDER = "/mnt/worker2/raw_data/openalex"
 OPENALEX_S3_BUCKET = "openalex"
-OPENALEX_WORKS_S3_PREFIX = "data/works"
+OPENALEX_WORKS_S3_PREFIX = "data/jsonl/works"
 S2_LOCAL_FOLDER = r"/mnt/worker2/raw_data/semantic_scholar"
 
 
