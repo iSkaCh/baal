@@ -136,7 +136,7 @@ class DataExtractor:
     @flow
     def flow(self):
         self.run_openalex_extractor(resume=True)
-        self.run_pubmed_update()
+        # self.run_pubmed_update()
 
         self.move_pubmed_metadata() # must be before s2
         self.download_s2_data()
