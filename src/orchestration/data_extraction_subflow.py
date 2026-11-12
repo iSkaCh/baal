@@ -112,7 +112,10 @@ class DataExtractor:
             headers={"x-api-key": S2_API_KEY},
         ).json()["files"]
         sleep(5)
-        download_s2_files(tldr_files + papers_files + s2orc_v2_files)
+        download_s2_files(
+            tldr_files + papers_files + s2orc_v2_files,
+            local_s2_folder=S2_LOCAL_FOLDER,
+        )
 
     @task
     def run_s2_extractor(self, resume=False):
