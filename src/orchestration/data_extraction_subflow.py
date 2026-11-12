@@ -127,7 +127,7 @@ class DataExtractor:
     def run_s2_extractor(self, resume=False):
         self.logger.info("Starting s2 extraction...")
         self.logger.info("Papers extraction...")
-        extract_papers(data_dir=S2_LOCAL_FOLDER, resume=resume, num_processes=0)
+        extract_papers(data_dir=S2_LOCAL_FOLDER, resume=resume, num_processes=2)
         self.logger.info("TLDR extraction...")
         extract_other_data(
             data_dir=S2_LOCAL_FOLDER,
