@@ -36,6 +36,21 @@ OPENALEX_WORKS_S3_PREFIX = "data/jsonl/works"
 S2_LOCAL_FOLDER = r"/mnt/worker2/raw_data/semantic_scholar"
 
 
+def _list_s2_dataset(dataset: str, tries: int = 8) -> list:
+    """List S2 dataset file URLs; the API rate-limits (429) aggressively,
+    so retry with linear backoff instead of crashing on KeyError."""
+    for i in range(tries):
+        r = requests.get(
+            f"https://api.semanticscholar.org/datasets/v1/release/latest/dataset/{dataset}",
+            headers={"x-api-key": S2_API_KEY},
+            timeout=60,
+        )
+        if r.status_code == 200:
+            return r.json()["files"]
+        sleep(10 * (i + 1))
+    raise RuntimeError(f"S2 dataset listing failed after {tries} tries: {dataset}")
+
+
 # NOTE: openalex S3 bucket is public and doesn't require sign in
 class DataExtractor:
     def __init__(self):
@@ -93,24 +108,15 @@ class DataExtractor:
         #     "https://api.semanticscholar.org/datasets/v1/release/latest/dataset/publication-venues",
         #     headers={"x-api-key": S2_API_KEY},
         # ).json()["files"]
-        tldr_files = requests.get(
-            "https://api.semanticscholar.org/datasets/v1/release/latest/dataset/tldrs",
-            headers={"x-api-key": S2_API_KEY},
-        ).json()["files"]
+        tldr_files = _list_s2_dataset("tldrs")
         sleep(5)
         # ids_files = requests.get(
         #     "https://api.semanticscholar.org/datasets/v1/release/latest/dataset/paper-ids",
         #     headers={"x-api-key": S2_API_KEY},
         # ).json()["files"]
-        papers_files = requests.get(
-            "https://api.semanticscholar.org/datasets/v1/release/latest/dataset/papers",
-            headers={"x-api-key": S2_API_KEY},
-        ).json()["files"]
+        papers_files = _list_s2_dataset("papers")
         sleep(5)
-        s2orc_v2_files = requests.get(
-            "https://api.semanticscholar.org/datasets/v1/release/latest/dataset/s2orc_v2",
-            headers={"x-api-key": S2_API_KEY},
-        ).json()["files"]
+        s2orc_v2_files = _list_s2_dataset("s2orc_v2")
         sleep(5)
         download_s2_files(
             tldr_files + papers_files + s2orc_v2_files,
